@@ -71,6 +71,7 @@ export class Store extends DurableObject {
     this.sql.exec("CREATE TABLE IF NOT EXISTS task (id TEXT PRIMARY KEY, chain INTEGER NOT NULL, created INTEGER NOT NULL, row TEXT NOT NULL)");
     this.sql.exec("CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT NOT NULL)");
     this.tasks = { 4217: new Map(), 8453: new Map() };
+    this.openNow = {}; this.openBefore = {}; this.left = []; // tasks that have just left the open list
     for (const r of this.sql.exec("SELECT id, chain, row FROM task")) this.tasks[r.chain]?.set(r.id, r.row);
     this.meta = {};
     for (const r of this.sql.exec("SELECT k, v FROM meta")) this.meta[r.k] = JSON.parse(r.v);
@@ -202,17 +203,40 @@ export class Store extends DurableObject {
     try {
       if (step === 1) await this.openPage(CHAINS[n % 2]);
       else await this.sweep(CHAINS[step - 2]);
+      if (this.left.length) await this.rereadLeft();
     } catch (e) {
       this.setMeta("lastRun", { at: Date.now(), ok: false, error: String(e).slice(0, 200) });
     }
   }
 
   // Open tasks of one chain, 50 at a time; when there are more than 50 the next call continues.
+  // A task that was open on the last pass and is missing from this one has just been decided, expired
+  // or cancelled. Those are re-read one by one straight away instead of waiting for the full pass.
   async openPage(chain) {
     const c = this.meta["openCursor:" + chain];
+    if (!c) this.openNow[chain] = new Set();
     const d = await this.fetchTasks(chain, "status=open&sort=newest" + (c ? "&cursor=" + encodeURIComponent(c) : ""));
-    if (d.hasMore && d.nextCursor) this.setMeta("openCursor:" + chain, d.nextCursor);
-    else { this.setMeta("openCursor:" + chain, null); this.setMeta("open:" + chain, Date.now()); }
+    const now = this.openNow[chain];
+    if (now) for (const t of d.tasks) now.add(t.id);
+    if (d.hasMore && d.nextCursor) return this.setMeta("openCursor:" + chain, d.nextCursor);
+    this.setMeta("openCursor:" + chain, null); this.setMeta("open:" + chain, Date.now());
+    const before = this.openBefore[chain];
+    if (now && before) for (const id of before) if (!now.has(id) && this.left.length < 60) this.left.push([chain, id]);
+    if (now) this.openBefore[chain] = now;
+    this.openNow[chain] = null;
+  }
+
+  // Re-read up to three tasks that have just left the open list.
+  async rereadLeft() {
+    for (const [chain, id] of this.left.splice(0, 3)) {
+      const t = JSON.parse(await getText(`/api/tasks/${id}?chainId=${chain}`));
+      if (!t || t.id !== id) continue;
+      const row = compact(t);
+      if (this.tasks[chain].get(id) !== row) {
+        this.tasks[chain].set(id, row);
+        this.sql.exec("INSERT INTO task (id, chain, created, row) VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET row = excluded.row", id, chain, secs(t.createdAt), row);
+      }
+    }
   }
 
   // --- serving ------------------------------------------------------------------------------

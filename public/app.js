@@ -638,7 +638,7 @@
 <ul>
 <li><b>Headline numbers, breakdowns and time series</b>: fetched together every minute. Last: ${at(t.headline)}. This is the “data as of” time at the top of every page.</li>
 <li><b>Activity feed</b>: every minute. Last: ${at(t.feed)}.</li>
-<li><b>Open tasks</b>: every 2 minutes per chain. Tempo: ${at(t.openTasks?.[4217])}. Base: ${at(t.openTasks?.[8453])}.</li>
+<li><b>Open tasks</b>: every 2 minutes per chain; a task that leaves the open list is re-read within the next minute. Tempo: ${at(t.openTasks?.[4217])}. Base: ${at(t.openTasks?.[8453])}.</li>
 <li><b>The whole task list</b>: 50 tasks per chain are re-read every minute, so a full pass over every task ever posted takes about 20 minutes. Last full pass, Tempo: ${at(t.fullPass?.[4217])}. Base: ${at(t.fullPass?.[8453])}.</li>
 <li><b>Heatmaps</b>: every 10 minutes.</li>
 <li>The server's copy is served for 60 seconds before it is rebuilt, and the page asks for it again once a minute.</li>
