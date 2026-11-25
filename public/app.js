@@ -235,7 +235,7 @@
       const tipHtml = `<b>${lName(a)} → ${rName(b)}</b><span>${usd(v)} · ${pct(v, total)} of all rewards</span>`;
       const op = b === "dead" ? 0.5 : b === "wait" ? 0.14 : 0.22;
       geo.push({ a, b, v, xa, xb, ya, yb, h, color: b === "open" ? "#D9A097" : b === "dead" || b === "wait" ? "#B0A79D" : "#FFF6E8" });
-      ribbons += `<path class="rb" data-link="${geo.length - 1}" style="--op:${op};animation-delay:${(lOrder.indexOf(a) * 420 + rOrder.indexOf(b) * 45)}ms" d="M${xa},${ya}C${mx},${ya} ${mx},${yb} ${xb},${yb}L${xb},${yb + h}C${mx},${yb + h} ${mx},${ya + h} ${xa},${ya + h}Z" fill="${b === "wait" ? "#B0A79D" : rFill(b)}" fill-opacity="${op}" data-tip="${esc(tipHtml)}"/>`;
+      ribbons += `<path class="rb" data-link="${geo.length - 1}" style="--op:${op};animation-delay:0ms" d="M${xa},${ya}C${mx},${ya} ${mx},${yb} ${xb},${yb}L${xb},${yb + h}C${mx},${yb + h} ${mx},${ya + h} ${xa},${ya + h}Z" fill="${b === "wait" ? "#B0A79D" : rFill(b)}" fill-opacity="${op}" data-tip="${esc(tipHtml)}"/>`;
     }
     // what each box says when pointed at: where a poster's money went, or who paid a winner
     const nodeTip = {};
@@ -320,9 +320,8 @@
     return head(lede) + svg + facts(list) + table + shareRow();
   }
   // --- the moving part of the money view ------------------------------------------------------------
-  // The bands are the animation. On arrival they grow out of each posting wallet in turn, curve across
-  // and connect on the other side. After that, one wallet at a time draws its bands again, so the page
-  // keeps moving. Pointing at a wallet or a box draws its bands again; a click keeps it lit.
+  // The bands are the animation. On arrival they all grow out of the posting wallets together, curve
+  // across and connect on the other side. Every few seconds they all draw again, so the page keeps moving. Pointing at a wallet or a box draws its bands again; a click keeps it lit.
   let FL = null, flSeen = null, flPin = null, flRun = 0, flIntro = 0;
   function mountFlow() {
     const box = $(".flowbox"); if (!box || !FL) return;
@@ -332,7 +331,7 @@
     // middle of it picks every band up where it was instead of starting over or skipping to the end.
     const first = !still && flSeen !== F.key;
     if (first) { flSeen = F.key; flIntro = performance.now(); }
-    const since = performance.now() - flIntro, introLen = F.lOrder.length * 420 + 2600;
+    const since = performance.now() - flIntro, introLen = 2200;
     if (still || since > introLen) paths.forEach((p) => p.classList.add("in"));
     else if (!first) paths.forEach((p) => (p.style.animationDelay = parseFloat(p.style.animationDelay) - since + "ms"));
     if (flPin && !box.querySelector(`[data-node="${CSS.escape(flPin)}"]`)) flPin = null;
@@ -340,7 +339,7 @@
     const light = (node, replay, soft) => {
       const act = node ? new Set(related(node)) : null;
       paths.forEach((p, i) => { p.style.fillOpacity = act ? (act.has(i) ? Math.min(0.9, +p.style.getPropertyValue("--op") * 2.6) : soft ? "" : 0.04) : ""; });
-      if (act && replay && !still) [...act].forEach((i, n) => { const p = paths[i]; p.classList.remove("in", "again"); void p.getBoundingClientRect(); p.style.animationDelay = n * 70 + "ms"; p.classList.add("again"); });
+      if (act && replay && !still) [...act].forEach((i) => { const p = paths[i]; p.classList.remove("in", "again"); void p.getBoundingClientRect(); p.style.animationDelay = "0ms"; p.classList.add("again"); });
     };
     let hover = null, turn = 0;
     box.onpointerover = (e) => { const n = e.target.closest("[data-node]")?.dataset.node || null; if (n === hover) return; hover = n; if (n) light(n, true); else light(flPin, false); };
@@ -348,13 +347,13 @@
     box.onclick = (e) => { const n = e.target.closest("[data-node]")?.dataset.node || null; flPin = n && n !== flPin ? n : null; light(flPin || hover, !!flPin); };
     if (flPin) light(flPin, false);
     if (still) return;
-    // idle: wallet by wallet, the bands draw themselves again
+    // idle: every few seconds all the bands draw themselves again, together
     const idle = () => {
       if (run !== flRun || !box.isConnected) return;
-      if (!hover && !flPin && !document.hidden) { const node = F.lOrder[turn++ % F.lOrder.length]; light(node, true, true); setTimeout(() => { if (run === flRun && !hover && !flPin) light(null); }, 2300); }
-      setTimeout(idle, 3200);
+      if (!hover && !flPin && !document.hidden) paths.forEach((p) => { p.classList.remove("in", "again"); void p.getBoundingClientRect(); p.style.animationDelay = "0ms"; p.classList.add("again"); });
+      setTimeout(idle, 7000);
     };
-    setTimeout(idle, Math.max(1500, introLen - since + 600));
+    setTimeout(idle, Math.max(5000, introLen - since + 5000));
   }
 
   // --- the moving part of the swarm view: a canvas over the lanes -----------------------------
