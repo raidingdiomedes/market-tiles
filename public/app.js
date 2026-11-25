@@ -323,6 +323,37 @@
     const table = `<h2>The most contested open tasks</h2><p class="sub">Open tasks on ${chainWord()}, by total entries so far.</p><div class="panel" style="overflow-x:auto"><table><thead><tr><th>Task</th><th class="n">Reward</th><th class="n">Entries</th><th class="n">Reward per entry</th><th class="n">Closes in</th></tr></thead><tbody>${rows}</tbody></table></div>`;
     return head(lede) + svg + facts(list) + table + shareRow();
   }
+  // --- the moving part of the pulse view ------------------------------------------------------------
+  // Graphs and numbers animate: bars grow up from the baseline together, breakdown bars grow out from
+  // the left, the heatmap fades in, and every big number counts up to its value. It plays on arrival
+  // and whenever the range, chain or heatmap is changed; pointing at a panel plays that panel again.
+  let puSeen = null, puRun = 0;
+  function countUp(el, ms = 1000) {
+    const txt = el.dataset.final || el.textContent, m = txt.match(/\d[\d,]*(\.\d+)?/); if (!m) return;
+    el.dataset.final = txt;
+    const target = parseFloat(m[0].replace(/,/g, "")), dec = (m[1] || "").length ? m[1].length - 1 : 0, t0 = performance.now(), my = (el._cu = (el._cu || 0) + 1);
+    const step = (t) => {
+      if (el._cu !== my || !el.isConnected) return;
+      const u = Math.min(1, (t - t0) / ms), v = target * (1 - (1 - u) ** 3);
+      el.textContent = u >= 1 ? txt : txt.replace(m[0], v.toLocaleString("en-US", { minimumFractionDigits: dec, maximumFractionDigits: dec }));
+      if (u < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }
+  function mountPulse() {
+    const run = ++puRun, still = state.card || matchMedia("(prefers-reduced-motion:reduce)").matches;
+    if (still || !src("series:day")) return;
+    const key = [state.range, state.chain, state.heat, !!D.tasks].join("|");
+    const play = (root) => { root.classList.remove("go"); void root.offsetWidth; root.classList.add("go"); root.querySelectorAll(".num .v,.chart .big,.fact .v").forEach((el) => countUp(el)); if (root.matches(".num,.fact")) countUp(root.querySelector(".v")); };
+    if (key !== puSeen) { puSeen = key; play(main); setTimeout(() => run === puRun && main.classList.remove("go"), 1600); }
+    let cur = null;
+    main.onpointerover = (e) => {
+      if (state.view !== "pulse") return;
+      const el = e.target.closest(".panel,.num,.fact"); if (el === cur) return; cur = el;
+      if (el && !el.classList.contains("scroll") && !main.classList.contains("go")) { play(el); setTimeout(() => el.classList.remove("go"), 1600); }
+    };
+  }
+
   // --- the moving part of the tile wall ----------------------------------------------------------------
   // The tiles are the animation. On arrival they all pop in together in one sweep from left to right.
   // Choosing another arrangement makes every tile fly to its new place. Pointing at a row pops that
@@ -507,7 +538,7 @@
   // ---------- view 4: pulse (time series, breakdowns, heatmap, posters per week, feed) ------
   function barsSvg(points, fmt, color = "#EFE9E2") {
     const W = 520, H = 120, n = points.length, max = Math.max(...points.map((p) => p[1]), 1e-9), bw = W / n;
-    const bars = points.map((p, i) => { const h = (p[1] / max) * (H - 4); return `<rect x="${(i * bw + bw * 0.12).toFixed(2)}" y="${(H - h).toFixed(2)}" width="${(bw * 0.76).toFixed(2)}" height="${Math.max(h, p[1] ? 1 : 0).toFixed(2)}" rx="${Math.min(2, bw * 0.3)}" fill="${color}"/><rect x="${(i * bw).toFixed(2)}" y="0" width="${bw.toFixed(2)}" height="${H}" fill="transparent" data-tip="${esc(`<b>${fmt(p[1])}</b><span>${p[0]}</span>`)}"/>`; }).join("");
+    const bars = points.map((p, i) => { const h = (p[1] / max) * (H - 4); return `<rect x="${(i * bw + bw * 0.12).toFixed(2)}" y="${(H - h).toFixed(2)}" width="${(bw * 0.76).toFixed(2)}" height="${Math.max(h, p[1] ? 1 : 0).toFixed(2)}" rx="${Math.min(2, bw * 0.3)}" fill="${color}" class="b"/><rect x="${(i * bw).toFixed(2)}" y="0" width="${bw.toFixed(2)}" height="${H}" fill="transparent" data-tip="${esc(`<b>${fmt(p[1])}</b><span>${p[0]}</span>`)}"/>`; }).join("");
     return `<svg viewBox="0 0 ${W} ${H + 18}" preserveAspectRatio="none" style="height:150px"><line x1="0" x2="${W}" y1="${H}" y2="${H}" stroke="#453E37"/>${bars}</svg><p class="cap" style="display:flex;justify-content:space-between;margin:2px 0 0"><span>${points[0]?.[0] ?? ""}</span><span>peak ${fmt(max)}</span><span>${points[n - 1]?.[0] ?? ""}</span></p>`;
   }
   function pulse() {
@@ -652,6 +683,7 @@
     if (state.view === "swarm") mountSwarm();
     if (state.view === "flow") mountFlow();
     if (state.view === "board") mountBoard();
+    if (state.view === "pulse") mountPulse();
     if (keep && $(".scroll", main)) $(".scroll", main).scrollTop = keep;
     const plain = { board: "Every task, one tile each", flow: "Where the money went", swarm: "What agents are working on now", pulse: "The market, day by day", methods: "How every number is made" }[state.view];
     document.title = `${plain} · Taskmarket live`;
