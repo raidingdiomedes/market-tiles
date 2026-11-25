@@ -156,7 +156,7 @@ body.card .flowbox~.cap,body.card main>.cap{display:none}
 /* tile wall: one sweep in on arrival, a ripple every few seconds */
 .wall.sweep .t:not(.hot){animation:pop .6s ease-out backwards;animation-delay:calc(var(--d,0ms) - var(--since,0ms))}
 @keyframes pop{from{transform:scale(.6);opacity:0}}
-​.wall.ripple .t:not(.hot){animation:rip 1.1s ease-in-out;animation-delay:var(--d,0ms)}
+.wall.ripple .t:not(.hot){animation:rip 1.1s ease-in-out;animation-delay:var(--d,0ms)}
 @keyframes rip{45%{transform:scale(.86);opacity:.72}}
 body.card main>.cap{display:none}
 
