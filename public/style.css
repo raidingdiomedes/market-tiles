@@ -152,3 +152,10 @@ body.card .row.swctl{display:none}
 @media (prefers-reduced-motion:reduce){.rb{animation:none;clip-path:none}}
 body.card .rb{animation:none;clip-path:none}
 body.card .flowbox~.cap,body.card main>.cap{display:none}
+
+/* tile wall: one sweep in on arrival, a ripple every few seconds */
+.wall.sweep .t:not(.hot){animation:pop .5s cubic-bezier(.3,1.4,.5,1) backwards;animation-delay:calc(var(--d,0ms) - var(--since,0ms))}
+@keyframes pop{from{transform:scale(0);opacity:0}}
+.wall.ripple .t:not(.hot){animation:rip .7s ease-in-out;animation-delay:var(--d,0ms)}
+@keyframes rip{40%{transform:scale(.45);opacity:.5}}
+body.card main>.cap{display:none}

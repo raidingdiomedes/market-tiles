@@ -63,7 +63,10 @@
     render();
     if (push && over.scroll !== false && view !== undefined && over.view !== "same") window.scrollTo({ top: 0 });
   }
-  function set(over) { Object.assign(state, over); history.replaceState(null, "", url()); render(); }
+  function set(over) {
+    if (state.view === "board" && ("group" in over || "chain" in over)) { bdFrom = new Map(); document.querySelectorAll(".wall .t").forEach((el) => { const r = el.getBoundingClientRect(); bdFrom.set(el.dataset.t, [r.left + scrollX, r.top + scrollY]); }); }
+    Object.assign(state, over); history.replaceState(null, "", url()); render();
+  }
 
   // ---------- data ----------------------------------------------------------------------------
   async function get(name) {
@@ -179,7 +182,8 @@
     } else {
       groups = [0, 1, 2, 3].map((o) => [OUT[o], `${n0(count[o])} tasks · ${usd(sum(ts.filter((t) => t.o === o), (t) => t.reward))}`, ts.filter((t) => t.o === o)]).filter((g) => g[2].length);
     }
-    const wall = `<div class="wall">${groups.map(([a, b, g]) => `<div class="g"><b>${a}</b>${b}</div><div class="ts">${g.map(tile).join("")}</div>`).join("")}</div>`;
+    const hint = `<p class="cap" style="font:400 12px var(--mono);color:var(--muted);margin:-6px 0 14px">Change the arrangement and every tile flies to its new place. Point at a row to play it again; point at a tile to read the task.</p>`;
+    const wall = hint + `<div class="wall">${groups.map(([a, b, g]) => `<div class="g"><b>${a}</b>${b}</div><div class="ts">${g.map(tile).join("")}</div>`).join("")}</div>`;
 
     // What the wall shows, in words.
     const posters = [...groupBy(ts, (t) => t.req)].map(([, g]) => g.length).sort((a, b) => b - a);
@@ -319,6 +323,52 @@
     const table = `<h2>The most contested open tasks</h2><p class="sub">Open tasks on ${chainWord()}, by total entries so far.</p><div class="panel" style="overflow-x:auto"><table><thead><tr><th>Task</th><th class="n">Reward</th><th class="n">Entries</th><th class="n">Reward per entry</th><th class="n">Closes in</th></tr></thead><tbody>${rows}</tbody></table></div>`;
     return head(lede) + svg + facts(list) + table + shareRow();
   }
+  // --- the moving part of the tile wall ----------------------------------------------------------------
+  // The tiles are the animation. On arrival they all pop in together in one sweep from left to right.
+  // Choosing another arrangement makes every tile fly to its new place. Pointing at a row pops that
+  // row in again, and every few seconds a ripple runs across the whole wall.
+  let bdSeen = null, bdIntro = 0, bdFrom = null, bdRun = 0;
+  function mountBoard() {
+    const wall = $(".wall"); if (!wall) return;
+    const run = ++bdRun, still = state.card || matchMedia("(prefers-reduced-motion:reduce)").matches;
+    const tiles = [...wall.querySelectorAll(".t")];
+    if (still || !tiles.length) { bdFrom = null; return; }
+    const w = wall.getBoundingClientRect(), pos = tiles.map((el) => el.getBoundingClientRect());
+    // each tile's place in the sweep: how far across the wall it sits
+    tiles.forEach((el, i) => el.style.setProperty("--d", Math.round(((pos[i].left - w.left) / w.width) * 900) + "ms"));
+    const key = state.chain + "|" + state.group;
+    if (bdFrom) { // a new arrangement: fly from the old place to the new one
+      const from = bdFrom; bdFrom = null; bdSeen = key; bdIntro = -1e9;
+      tiles.forEach((el, i) => {
+        const o = from.get(el.dataset.t), x = pos[i].left + scrollX, y = pos[i].top + scrollY;
+        if (o) el.animate([{ transform: `translate(${o[0] - x}px,${o[1] - y}px)` }, { transform: "none" }], { duration: 900, delay: Math.random() * 180, easing: "cubic-bezier(.3,.8,.2,1)", fill: "backwards" });
+        else el.animate([{ transform: "scale(0)", opacity: 0 }, { transform: "none", opacity: 1 }], { duration: 500, delay: 500 + Math.random() * 300, easing: "ease-out", fill: "backwards" });
+      });
+    } else {
+      // the opening sweep plays once per arrangement; a redraw in the middle of it carries on from the same moment
+      if (bdSeen !== key) { bdSeen = key; bdIntro = performance.now(); }
+      const since = performance.now() - bdIntro;
+      if (since < 1500) { wall.style.setProperty("--since", Math.round(since) + "ms"); wall.classList.add("sweep"); setTimeout(() => run === bdRun && wall.classList.remove("sweep"), 1600 - since); }
+    }
+    // pointing at a row pops that row in again
+    let row = null;
+    const rows = [...wall.querySelectorAll(".ts")];
+    wall.onpointerover = (e) => {
+      const el = e.target.closest(".ts,.g"); if (!el) return;
+      const r = el.classList.contains("g") ? el.nextElementSibling : el; if (r === row) return; row = r;
+      if (wall.classList.contains("sweep")) return;
+      [...r.children].forEach((t, i, all) => t.animate([{ transform: "scale(0)", opacity: 0 }, { transform: "scale(1.25)", opacity: 1, offset: 0.7 }, { transform: "none", opacity: 1 }], { duration: 420, delay: (i / all.length) * Math.min(900, 200 + all.length * 3), easing: "ease-out", fill: "backwards" }));
+    };
+    wall.onpointerleave = () => (row = null);
+    // idle: a ripple across the whole wall every few seconds
+    const idle = () => {
+      if (run !== bdRun || !wall.isConnected) return;
+      if (!row && !document.hidden && !wall.classList.contains("sweep")) { wall.classList.add("ripple"); setTimeout(() => wall.classList.remove("ripple"), 1700); }
+      setTimeout(idle, 7000);
+    };
+    setTimeout(idle, 6000);
+  }
+
   // --- the moving part of the money view ------------------------------------------------------------
   // The bands are the animation. On arrival they all grow out of the posting wallets together, curve
   // across and connect on the other side. Every few seconds they all draw again, so the page keeps moving. Pointing at a wallet or a box draws its bands again; a click keeps it lit.
@@ -601,6 +651,7 @@
     main.innerHTML = RENDER[state.view]();
     if (state.view === "swarm") mountSwarm();
     if (state.view === "flow") mountFlow();
+    if (state.view === "board") mountBoard();
     if (keep && $(".scroll", main)) $(".scroll", main).scrollTop = keep;
     const plain = { board: "Every task, one tile each", flow: "Where the money went", swarm: "What agents are working on now", pulse: "The market, day by day", methods: "How every number is made" }[state.view];
     document.title = `${plain} · Taskmarket live`;
