@@ -326,7 +326,7 @@
   // --- the moving part of the tile wall ----------------------------------------------------------------
   // The tiles are the animation. On arrival they all pop in together in one sweep from left to right.
   // Choosing another arrangement makes every tile fly to its new place. Pointing at a row pops that
-  // row in again, and every few seconds a ripple runs across the whole wall.
+  // row in again, and every few seconds a soft ripple runs across the whole wall.
   let bdSeen = null, bdIntro = 0, bdFrom = null, bdRun = 0;
   function mountBoard() {
     const wall = $(".wall"); if (!wall) return;
@@ -342,7 +342,7 @@
       tiles.forEach((el, i) => {
         const o = from.get(el.dataset.t), x = pos[i].left + scrollX, y = pos[i].top + scrollY;
         if (o) el.animate([{ transform: `translate(${o[0] - x}px,${o[1] - y}px)` }, { transform: "none" }], { duration: 900, delay: Math.random() * 180, easing: "cubic-bezier(.3,.8,.2,1)", fill: "backwards" });
-        else el.animate([{ transform: "scale(0)", opacity: 0 }, { transform: "none", opacity: 1 }], { duration: 500, delay: 500 + Math.random() * 300, easing: "ease-out", fill: "backwards" });
+        else el.animate([{ transform: "scale(.6)", opacity: 0 }, { transform: "none", opacity: 1 }], { duration: 500, delay: 500 + Math.random() * 300, easing: "ease-out", fill: "backwards" });
       });
     } else {
       // the opening sweep plays once per arrangement; a redraw in the middle of it carries on from the same moment
@@ -357,16 +357,16 @@
       const el = e.target.closest(".ts,.g"); if (!el) return;
       const r = el.classList.contains("g") ? el.nextElementSibling : el; if (r === row) return; row = r;
       if (wall.classList.contains("sweep")) return;
-      [...r.children].forEach((t, i, all) => t.animate([{ transform: "scale(0)", opacity: 0 }, { transform: "scale(1.25)", opacity: 1, offset: 0.7 }, { transform: "none", opacity: 1 }], { duration: 420, delay: (i / all.length) * Math.min(900, 200 + all.length * 3), easing: "ease-out", fill: "backwards" }));
+      [...r.children].forEach((t, i, all) => t.animate([{ transform: "scale(.7)", opacity: 0.25 }, { transform: "none", opacity: 1 }], { duration: 480, delay: (i / all.length) * Math.min(900, 200 + all.length * 3), easing: "ease-out", fill: "backwards" }));
     };
     wall.onpointerleave = () => (row = null);
     // idle: a ripple across the whole wall every few seconds
     const idle = () => {
       if (run !== bdRun || !wall.isConnected) return;
-      if (!row && !document.hidden && !wall.classList.contains("sweep")) { wall.classList.add("ripple"); setTimeout(() => wall.classList.remove("ripple"), 1700); }
-      setTimeout(idle, 7000);
+      if (!row && !document.hidden && !wall.classList.contains("sweep")) { wall.classList.add("ripple"); setTimeout(() => wall.classList.remove("ripple"), 2200); }
+      setTimeout(idle, 12000);
     };
-    setTimeout(idle, 6000);
+    setTimeout(idle, 9000);
   }
 
   // --- the moving part of the money view ------------------------------------------------------------
