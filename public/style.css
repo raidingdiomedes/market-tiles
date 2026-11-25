@@ -115,6 +115,7 @@ code{font:400 12.5px var(--mono);color:var(--cream);background:var(--panel);bord
   .lede{font-size:16px}
   .bar{grid-template-columns:96px 1fr 50px}
   #tip{left:8px;right:8px;max-width:none}
+  table{min-width:540px}
 }
 @media (prefers-reduced-motion:reduce){.hot,.dot-new{animation:none}}
 

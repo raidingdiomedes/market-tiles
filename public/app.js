@@ -270,7 +270,7 @@
     const H = top.length * lane + 30, xs = (ms) => padL + ((ms - from) / (now - from)) * (W - padR - padL - 30);
     let g = "";
     // time grid
-    for (const h of [24, 18, 12, 6, 0]) { const x = xs(now - h * 3600e3); g += `<line x1="${x}" x2="${x}" y1="0" y2="${H - 24}" stroke="#453E37" stroke-dasharray="2 5"/><text x="${x}" y="${H - 8}" text-anchor="${h === 24 ? "start" : h === 0 ? "end" : "middle"}">${h ? h + " h ago" : "now"}</text>`; }
+    for (const h of narrow ? [24, 12, 0] : [24, 18, 12, 6, 0]) { const x = xs(now - h * 3600e3); g += `<line x1="${x}" x2="${x}" y1="0" y2="${H - 24}" stroke="#453E37" stroke-dasharray="2 5"/><text x="${x}" y="${H - 8}" text-anchor="${h === 24 ? "start" : h === 0 ? "end" : "middle"}">${h ? h + " h ago" : "now"}</text>`; }
     const rnd = (s) => { let x = 0; for (let i = 0; i < s.length; i++) x = (x * 31 + s.charCodeAt(i)) >>> 0; return (x % 1000) / 1000; };
     const maxR = Math.max(...top.map((x) => x.t.reward), 1);
     top.forEach((x, i) => {
