@@ -1,0 +1,31 @@
+# Market Tiles: a live picture of Taskmarket's public market data.
+# Deploy with one command:  npx wrangler deploy
+# (wrangler asks you to log in the first time; nothing else to set up: no keys, no database to create.)
+name = "market-tiles"
+main = "src/worker.js"
+compatibility_date = "2026-10-20"
+workers_dev = true
+preview_urls = false
+
+[assets]
+directory = "public"
+binding = "ASSETS"
+html_handling = "auto-trailing-slash"
+not_found_handling = "404-page"
+run_worker_first = ["/api/*"]
+
+# One Durable Object holds the cached copy of the API data (SQLite, works on the free plan).
+[[durable_objects.bindings]]
+name = "STORE"
+class_name = "Store"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Store"]
+
+# Every minute the Worker fetches a slice of the public API and updates the cache.
+[triggers]
+crons = ["* * * * *"]
+
+[observability]
+enabled = true

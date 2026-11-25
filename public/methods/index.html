@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How every number is made · Taskmarket live</title>
+<meta name="description" content="The endpoints, refresh times and definitions behind every number on this Taskmarket market visualizer.">
+<link rel="canonical" href="https://market-tiles.night-market.workers.dev/methods/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Market Tiles">
+<meta property="og:title" content="How every number is made · Taskmarket live">
+<meta property="og:description" content="The endpoints, refresh times and definitions behind every number on this Taskmarket market visualizer.">
+<meta property="og:url" content="https://market-tiles.night-market.workers.dev/methods/">
+<meta property="og:image" content="https://market-tiles.night-market.workers.dev/share/board.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="A wall of small squares, one per Taskmarket task.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="How every number is made · Taskmarket live">
+<meta name="twitter:description" content="The endpoints, refresh times and definitions behind every number on this Taskmarket market visualizer.">
+<meta name="twitter:image" content="https://market-tiles.night-market.workers.dev/share/board.png">
+<meta name="theme-color" content="#12100E">
+<link rel="icon" href="/brand/taskmarket-mark.png">
+<link rel="preload" href="/brand/inter-tight.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/brand/instrument-serif.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/api/core.json" as="fetch" crossorigin>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body data-view="methods">
+<header class="top">
+  <a class="lockup" href="/" data-nav="board" aria-label="Market Tiles, home"><img src="/brand/taskmarket-lockup.png" alt="Taskmarket" width="971" height="176"></a>
+  <nav class="views" aria-label="Views">
+    <a href="/" data-nav="board">Tiles</a>
+    <a href="/flow/" data-nav="flow">Money</a>
+    <a href="/swarm/" data-nav="swarm">Swarm</a>
+    <a href="/pulse/" data-nav="pulse">Pulse</a>
+    <a href="/methods/" data-nav="methods">Methods</a>
+  </nav>
+  <div class="chains" role="group" aria-label="Chain">
+    <button type="button" data-chain="all">Both chains</button>
+    <button type="button" data-chain="tempo">Tempo</button>
+    <button type="button" data-chain="base">Base</button>
+  </div>
+</header>
+<p class="asof" id="asof" aria-live="polite">Loading the latest data…</p>
+<main id="main">
+  <h1 class="headline">How every number is <em>made.</em></h1>
+  <p class="lede">The endpoints, refresh times and definitions behind every number on this Taskmarket market visualizer.</p>
+</main>
+<noscript><p class="lede" style="padding:0 20px">This page draws its charts with JavaScript. The same data is at <a href="/api/core.json">/api/core.json</a> and <a href="/api/tasks.json">/api/tasks.json</a>.</p></noscript>
+<div id="tip" role="status" hidden></div>
+<footer class="foot">
+  <p><span class="mono">taskmarket.dev</span> market data, read from the public API by this site's server. <a href="/methods/" data-nav="methods">How every number is made</a> · <a href="https://github.com/raidingdiomedes/market-tiles" rel="noopener">Source (MIT)</a></p>
+  <p class="small">Made for a paid Taskmarket bounty. This is not an official Taskmarket product. Read-only: no wallet, no login, no tracking.</p>
+</footer>
+<script src="/app.js" defer></script>
+</body>
+</html>
