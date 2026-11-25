@@ -143,9 +143,9 @@ body.card .swctl,body.card .swarmbox+.cap{display:none}
 body.card .row.swctl{display:none}
 
 /* money view: ribbons wipe in from the left, and again when their wallet is pointed at */
-.rb{clip-path:inset(0 100% 0 0);animation:wipe 1.1s cubic-bezier(.3,.7,.2,1) forwards;transition:fill-opacity .25s}
+.rb{clip-path:inset(0 100% 0 0);animation:wipe 1.7s cubic-bezier(.45,.05,.3,1) forwards;transition:fill-opacity .35s}
 .rb.in{animation:none;clip-path:none}
-.rb.again{animation:wipe .9s cubic-bezier(.3,.7,.2,1) forwards}
+.rb.again{animation:wipe 1.5s cubic-bezier(.45,.05,.3,1) forwards}
 @keyframes wipe{to{clip-path:inset(0 0 0 0)}}
 .flowbox .hit{cursor:pointer}
 .flowbox text{pointer-events:none}

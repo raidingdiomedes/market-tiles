@@ -233,10 +233,9 @@
       const A = ln.get(a), B = rn.get(b), h = Math.max(0.6, v * k), ya = A.y + A.used, yb = B.y + B.used; A.used += h; B.used += h;
       const xa = x0 + nodeW, xb = x1, mx = (xa + xb) / 2;
       const tipHtml = `<b>${lName(a)} → ${rName(b)}</b><span>${usd(v)} · ${pct(v, total)} of all rewards</span>`;
-      const op = b === "dead" ? 0.62 : b === "wait" ? 0.2 : 0.3;
-      const tone = b === "open" ? "s" : b === "dead" ? "d" : b === "wait" || b === "split" ? "m" : "p";
+      const op = b === "dead" ? 0.5 : b === "wait" ? 0.14 : 0.22;
       geo.push({ a, b, v, xa, xb, ya, yb, h, color: b === "open" ? "#D9A097" : b === "dead" || b === "wait" ? "#B0A79D" : "#FFF6E8" });
-      ribbons += `<path class="rb" data-link="${geo.length - 1}" style="--op:${op};animation-delay:${(lOrder.indexOf(a) * 70 + rOrder.indexOf(b) * 25)}ms" d="M${xa},${ya}C${mx},${ya} ${mx},${yb} ${xb},${yb}L${xb},${yb + h}C${mx},${yb + h} ${mx},${ya + h} ${xa},${ya + h}Z" fill="url(#band-${tone}${geo.length % 3})" fill-opacity="${op}" data-tip="${esc(tipHtml)}"/>`;
+      ribbons += `<path class="rb" data-link="${geo.length - 1}" style="--op:${op};animation-delay:${(lOrder.indexOf(a) * 420 + rOrder.indexOf(b) * 45)}ms" d="M${xa},${ya}C${mx},${ya} ${mx},${yb} ${xb},${yb}L${xb},${yb + h}C${mx},${yb + h} ${mx},${ya + h} ${xa},${ya + h}Z" fill="${b === "wait" ? "#B0A79D" : rFill(b)}" fill-opacity="${op}" data-tip="${esc(tipHtml)}"/>`;
     }
     // what each box says when pointed at: where a poster's money went, or who paid a winner
     const nodeTip = {};
@@ -254,12 +253,8 @@
     let nodes = "";
     for (const key of lOrder) { const n = ln.get(key); nodes += `<rect x="${x0}" y="${n.y}" width="${nodeW}" height="${n.h}" rx="2" fill="#EFE9E2"/><rect class="hit" data-node="L${esc(key)}" x="0" y="${n.y - pad / 2}" width="${x0 + nodeW}" height="${n.h + pad}" fill="transparent" data-tip="${esc(nodeTip["L" + key])}"/>` + label(x0 - 8, "end", n.y, n.h, lName(key), usd(lv.get(key))); }
     for (const key of rOrder) { const n = rn.get(key); nodes += `<rect x="${x1}" y="${n.y}" width="${nodeW}" height="${n.h}" rx="2" fill="${rFill(key)}" ${key === "wait" ? 'stroke="#B0A79D" stroke-width="1.5"' : ""}/><rect class="hit" data-node="R${esc(key)}" x="${x1}" y="${n.y - pad / 2}" width="${W - x1}" height="${n.h + pad}" fill="transparent" data-tip="${esc(nodeTip["R" + key])}"/>` + label(x1 + nodeW + 8, "start", n.y, n.h, rName(key), usd(rv.get(key))); }
-    // The bands themselves move: each is filled with a soft light-and-dark wave that travels from the
-    // posters' side to the other side, at three slightly different speeds so the bands do not march in step.
-    const moving = !state.card && !matchMedia("(prefers-reduced-motion:reduce)").matches;
-    const bandDefs = Object.entries({ p: "#FFF6E8", s: "#D9A097", m: "#B0A79D", d: "#453E37" }).map(([tone, col]) => [0, 1, 2].map((v) => { const period = 230 + v * 70; return `<linearGradient id="band-${tone}${v}" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="${period}" y2="0" spreadMethod="repeat"><stop offset="0" stop-color="${col}" stop-opacity=".38"/><stop offset=".5" stop-color="${col}" stop-opacity="1"/><stop offset="1" stop-color="${col}" stop-opacity=".38"/>${moving ? `<animateTransform attributeName="gradientTransform" type="translate" from="0 0" to="${period} 0" dur="${2.6 + v * 0.7}s" repeatCount="indefinite"/>` : ""}</linearGradient>`; }).join("")).join("");
-    FL = { W, H, geo, total, key: state.chain + "|" + W };
-    const svg = `<svg viewBox="0 -22 ${W} ${H + 30}" width="${W}" height="${H + 30}" role="img" aria-label="Rewards flowing from the wallets that posted tasks to the wallets that won them, and to rewards still held or ended unpaid."><defs>${bandDefs}</defs><text x="${x0 + nodeW}" y="-8" text-anchor="end">POSTED BY</text><text x="${x1}" y="-8">WENT TO</text>${ribbons}${nodes}</svg>`;
+    FL = { W, H, geo, total, lOrder: lOrder.map((k) => "L" + k), key: state.chain + "|" + W };
+    const svg = `<svg viewBox="0 -22 ${W} ${H + 30}" width="${W}" height="${H + 30}" role="img" aria-label="Rewards flowing from the wallets that posted tasks to the wallets that won them, and to rewards still held or ended unpaid."><text x="${x0 + nodeW}" y="-8" text-anchor="end">POSTED BY</text><text x="${x1}" y="-8">WENT TO</text>${ribbons}${nodes}</svg>`;
 
     const paidTs = ts.filter((t) => t.o === 0), paid = sum(paidTs, (t) => t.reward);
     const top3 = postTotals.slice(0, 3).reduce((s, x) => s + x[1], 0);
@@ -274,7 +269,7 @@
       self.length && [n0(self.length), `paid tasks list the <b>posting wallet itself</b> as the winner (${usd(sum(self, (t) => t.reward))}).`],
     ];
     const note = `<p class="sub" style="color:var(--muted);font-size:13.5px;max-width:80ch;margin-top:14px">Each task's full reward is counted once. The task list names one winner per task; ${n0(rc.get("split") || 0)} paid tasks had more than one winner, and their rewards are shown as “Shared by several winners” because the list does not give the split. Wallets are shown as addresses only.</p>`;
-    const hint = `<p class="cap" style="font:400 12px var(--mono);color:var(--muted);margin:0 0 10px">Money moves from left to right. Point at a wallet or a box to follow its money; click to keep it lit.</p>`;
+    const hint = `<p class="cap" style="font:400 12px var(--mono);color:var(--muted);margin:0 0 10px">Each band runs from the wallet that posted a reward to where the money went. Point at a wallet to draw its bands again.</p>`;
     return head(lede) + hint + `<div class="flowbox" style="position:relative">${svg}</div>` + note + facts(list) + shareRow();
   }
 
@@ -325,28 +320,41 @@
     return head(lede) + svg + facts(list) + table + shareRow();
   }
   // --- the moving part of the money view ------------------------------------------------------------
-  // Only the bands move. They wipe in from the posters' side on arrival and their fill keeps travelling
-  // left to right (see bandDefs). Pointing at a wallet or a box lights its bands and wipes them in again;
-  // a click keeps it lit.
-  let FL = null, flSeen = null, flPin = null;
+  // The bands are the animation. On arrival they grow out of each posting wallet in turn, curve across
+  // and connect on the other side. After that, one wallet at a time draws its bands again, so the page
+  // keeps moving. Pointing at a wallet or a box draws its bands again; a click keeps it lit.
+  let FL = null, flSeen = null, flPin = null, flRun = 0, flIntro = 0;
   function mountFlow() {
     const box = $(".flowbox"); if (!box || !FL) return;
-    const F = FL, still = state.card || matchMedia("(prefers-reduced-motion:reduce)").matches;
+    const run = ++flRun, F = FL, still = state.card || matchMedia("(prefers-reduced-motion:reduce)").matches;
     const paths = [...box.querySelectorAll(".rb")];
-    if (still || flSeen === F.key) paths.forEach((p) => p.classList.add("in")); // only wipe in on the first visit
-    flSeen = F.key;
+    // The full draw plays once per visit. The page is redrawn when fresh data lands, so a redraw in the
+    // middle of it picks every band up where it was instead of starting over or skipping to the end.
+    const first = !still && flSeen !== F.key;
+    if (first) { flSeen = F.key; flIntro = performance.now(); }
+    const since = performance.now() - flIntro, introLen = F.lOrder.length * 420 + 2600;
+    if (still || since > introLen) paths.forEach((p) => p.classList.add("in"));
+    else if (!first) paths.forEach((p) => (p.style.animationDelay = parseFloat(p.style.animationDelay) - since + "ms"));
     if (flPin && !box.querySelector(`[data-node="${CSS.escape(flPin)}"]`)) flPin = null;
-    const related = (node) => new Set(F.geo.map((g, i) => (("L" + g.a === node || "R" + g.b === node) ? i : -1)).filter((i) => i >= 0));
-    const light = (node, replay) => {
-      const active = node ? related(node) : null;
-      paths.forEach((p, i) => { p.style.fillOpacity = active ? (active.has(i) ? Math.min(0.95, +p.style.getPropertyValue("--op") * 2.4) : 0.04) : ""; });
-      if (active && replay && !still) for (const i of active) { const p = paths[i]; p.classList.remove("in", "again"); void p.getBoundingClientRect(); p.style.animationDelay = "0ms"; p.classList.add("again"); }
+    const related = (node) => F.geo.map((g, i) => (("L" + g.a === node || "R" + g.b === node) ? i : -1)).filter((i) => i >= 0);
+    const light = (node, replay, soft) => {
+      const act = node ? new Set(related(node)) : null;
+      paths.forEach((p, i) => { p.style.fillOpacity = act ? (act.has(i) ? Math.min(0.9, +p.style.getPropertyValue("--op") * 2.6) : soft ? "" : 0.04) : ""; });
+      if (act && replay && !still) [...act].forEach((i, n) => { const p = paths[i]; p.classList.remove("in", "again"); void p.getBoundingClientRect(); p.style.animationDelay = n * 70 + "ms"; p.classList.add("again"); });
     };
-    let hover = null;
+    let hover = null, turn = 0;
     box.onpointerover = (e) => { const n = e.target.closest("[data-node]")?.dataset.node || null; if (n === hover) return; hover = n; if (n) light(n, true); else light(flPin, false); };
     box.onpointerleave = () => { hover = null; light(flPin, false); };
     box.onclick = (e) => { const n = e.target.closest("[data-node]")?.dataset.node || null; flPin = n && n !== flPin ? n : null; light(flPin || hover, !!flPin); };
     if (flPin) light(flPin, false);
+    if (still) return;
+    // idle: wallet by wallet, the bands draw themselves again
+    const idle = () => {
+      if (run !== flRun || !box.isConnected) return;
+      if (!hover && !flPin && !document.hidden) { const node = F.lOrder[turn++ % F.lOrder.length]; light(node, true, true); setTimeout(() => { if (run === flRun && !hover && !flPin) light(null); }, 2300); }
+      setTimeout(idle, 3200);
+    };
+    setTimeout(idle, Math.max(1500, introLen - since + 600));
   }
 
   // --- the moving part of the swarm view: a canvas over the lanes -----------------------------
