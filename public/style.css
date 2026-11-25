@@ -136,3 +136,8 @@ body.card[data-view=flow] .headline,body.card[data-view=swarm] .headline{font-si
 body.card[data-view=flow] .lede,body.card[data-view=swarm] .lede{font-size:18px;margin-bottom:14px}
 body.card[data-view=pulse] .grid2~*{display:none}
 body.card .wall{grid-template-columns:200px 1fr}
+
+.swctl input[type=range]{flex:1 1 220px;max-width:520px;accent-color:#D9A097;height:28px}
+.swarmbox [data-lane]{transition:opacity .2s}
+body.card .swctl,body.card .swarmbox+.cap{display:none}
+body.card .row.swctl{display:none}

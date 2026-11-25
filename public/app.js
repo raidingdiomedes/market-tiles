@@ -273,21 +273,20 @@
     for (const h of narrow ? [24, 12, 0] : [24, 18, 12, 6, 0]) { const x = xs(now - h * 3600e3); g += `<line x1="${x}" x2="${x}" y1="0" y2="${H - 24}" stroke="#453E37" stroke-dasharray="2 5"/><text x="${x}" y="${H - 8}" text-anchor="${h === 24 ? "start" : h === 0 ? "end" : "middle"}">${h ? h + " h ago" : "now"}</text>`; }
     const rnd = (s) => { let x = 0; for (let i = 0; i < s.length; i++) x = (x * 31 + s.charCodeAt(i)) >>> 0; return (x % 1000) / 1000; };
     const maxR = Math.max(...top.map((x) => x.t.reward), 1);
-    top.forEach((x, i) => {
-      const cy = i * lane + lane / 2 + 4, tx = W - padR - 14, side = 12 + 20 * Math.sqrt(x.t.reward / maxR);
+    const lanes = top.map((x, i) => {
+      const cy = i * lane + lane / 2 + 4, tx = W - padR - 14, side = 12 + 20 * Math.sqrt(x.t.reward / maxR), tcx = tx + 14;
       // faint guide curves, as in the kit's "converge" plate
-      for (const s of [-1, 1]) g += `<path d="M${padL},${cy + s * (lane / 2 - 10)}C${tx * 0.55},${cy + s * (lane / 2 - 10)} ${tx * 0.8},${cy} ${tx},${cy}" fill="none" stroke="#D9A097" stroke-opacity=".16"/>`;
-      for (const r of x.rows) {
-        const px = xs(r[0]), u = (px - padL) / (tx - padL), spread = (lane / 2 - 10) * (1 - u * u * u), y = cy + (rnd(r[4] + r[0]) * 2 - 1) * spread;
-        const fresh = now - r[0] < 3600e3;
-        g += `<circle cx="${px.toFixed(1)}" cy="${y.toFixed(1)}" r="${fresh ? 2.6 : 2}" fill="${fresh ? "#FFF6E8" : "#EFE9E2"}" fill-opacity="${fresh ? 1 : 0.5}"${fresh ? ' class="hot"' : ""}/>`;
-      }
-      g += `<a href="${taskUrl(x.t)}" rel="noopener"><rect x="${tx - side / 2 + 14}" y="${cy - side / 2}" width="${side}" height="${side}" rx="${side * 0.26}" fill="#FFF6E8" data-tip="${esc(taskTip(x.t))}"/></a>`;
+      for (const s of [-1, 1]) g += `<path class="guide" data-lane="${i}" d="M${padL},${cy + s * (lane / 2 - 10)}C${tx * 0.55},${cy + s * (lane / 2 - 10)} ${tx * 0.8},${cy} ${tx},${cy}" fill="none" stroke="#D9A097" stroke-opacity=".16"/>`;
+      const dots = x.rows.map((r) => { const px = xs(r[0]), u = (px - padL) / (tx - padL), spread = (lane / 2 - 10) * (1 - u * u * u); return { t: r[0], x: px, y: cy + (rnd(r[4] + r[0]) * 2 - 1) * spread, actor: r[4], key: r[0] + r[4] + r[2] }; }).sort((a, b) => a.t - b.t);
+      g += `<rect class="tile" data-lane="${i}" x="${tcx - side / 2}" y="${cy - side / 2}" width="${side}" height="${side}" rx="${side * 0.26}" fill="#FFF6E8"/>`;
       const lx = tx + 14 + 22 + 12;
-      if (!narrow) g += `<text x="${lx}" y="${cy - 8}" style="fill:#EFE9E2;font:600 13px 'Inter Tight',sans-serif">${esc(x.t.title.slice(0, 34))}${x.t.title.length > 34 ? "…" : ""}</text><text x="${lx}" y="${cy + 8}">${n0(x.rows.length)} entries from ${n0(x.agents)} agents today</text><text x="${lx}" y="${cy + 23}">${usd(x.t.reward)} · ${n0(x.t.entries)} in all · ${x.t.o === 1 ? "closes in " + until(x.t.expiry) : OUT[x.t.o].toLowerCase()}</text>`;
-      else g += `<text x="${padL}" y="${cy - lane / 2 + 12}" style="fill:#EFE9E2;font:600 12px 'Inter Tight',sans-serif">${esc(x.t.title.slice(0, 40))}</text><text x="${W - 2}" y="${cy + 4}" text-anchor="end" style="fill:#EFE9E2">${n0(x.rows.length)}</text><text x="${W - 2}" y="${cy + 18}" text-anchor="end">${usd(x.t.reward)}</text>`;
+      if (!narrow) g += `<a href="${taskUrl(x.t)}" rel="noopener" class="lanelabel" data-lane="${i}"><text x="${lx}" y="${cy - 8}" style="fill:#EFE9E2;font:600 13px 'Inter Tight',sans-serif">${esc(x.t.title.slice(0, 34))}${x.t.title.length > 34 ? "…" : ""}</text><text x="${lx}" y="${cy + 8}"><tspan id="cnt-${i}" style="fill:#FFF6E8">${n0(x.rows.length)}</tspan> entries from ${n0(x.agents)} agents today</text><text x="${lx}" y="${cy + 23}">${usd(x.t.reward)} · ${n0(x.t.entries)} in all · ${x.t.o === 1 ? "closes in " + until(x.t.expiry) : OUT[x.t.o].toLowerCase()}</text></a>`;
+      else g += `<text x="${padL}" y="${cy - lane / 2 + 12}" style="fill:#EFE9E2;font:600 12px 'Inter Tight',sans-serif">${esc(x.t.title.slice(0, 40))}</text><text id="cnt-${i}" x="${W - 2}" y="${cy + 4}" text-anchor="end" style="fill:#EFE9E2">${n0(x.rows.length)}</text><text x="${W - 2}" y="${cy + 18}" text-anchor="end">${usd(x.t.reward)}</text>`;
+      return { cy, tx: tcx, side, dots, task: x.t, top: i * lane + 4, bottom: (i + 1) * lane + 4 };
     });
-    const svg = top.length ? `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Entries sent in the last 24 hours, as dots converging on the tasks they were sent to.">${g}</svg>` : `<div class="skeleton">No entries on ${chainWord()} in the last 24 hours.</div>`;
+    SW = { W, H, from, now, lanes, lane, padL, xw: W - padR - padL - 30, key: state.chain + "|" + top.map((x) => x.t.id).join() };
+    const controls = top.length ? `<p class="row swctl"><button type="button" class="share" id="sw-play" style="min-width:132px">Replay the day</button><input id="sw-scrub" type="range" min="0" max="1000" value="1000" aria-label="Move through the last 24 hours"><span class="label" id="sw-clock"></span></p>` : "";
+    const svg = top.length ? `${controls}<div class="swarmbox" style="position:relative"><svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Entries sent in the last 24 hours, as dots converging on the tasks they were sent to.">${g}</svg><canvas id="sw-canvas" style="position:absolute;left:0;top:0;touch-action:pan-y"></canvas></div><p class="cap" style="font:400 12px var(--mono);color:var(--muted);margin:6px 0 0">Press “Replay the day” or drag the slider. Hover a dot to see who sent it and when; hover a lane to single it out; click a square to open the task.</p>` : `<div class="skeleton">No entries on ${chainWord()} in the last 24 hours.</div>`;
 
     const open = tasks().filter((t) => t.o === 1), openB = open.filter((t) => t.mode === "bounty");
     const top3 = per.slice(0, 3).reduce((s, x) => s + x.rows.length, 0), agents = new Set(subs.map((r) => r[4])).size;
@@ -302,6 +301,93 @@
     const rows = open.sort((a, b) => b.entries - a.entries).slice(0, 12).map((t) => `<tr><td><a href="${taskUrl(t)}" rel="noopener">${esc(t.title.slice(0, 60))}</a><br><span class="mono" style="font-size:11px;color:var(--muted)">${t.ref} · ${CHAIN_NAME[t.chain]} · ${t.mode}</span></td><td class="n">${usd(t.reward)}</td><td class="n">${n0(t.entries)}</td><td class="n">${t.entries ? usd(t.reward / t.entries) : "–"}</td><td class="n">${until(t.expiry)}</td></tr>`).join("");
     const table = `<h2>The most contested open tasks</h2><p class="sub">Open tasks on ${chainWord()}, by total entries so far.</p><div class="panel" style="overflow-x:auto"><table><thead><tr><th>Task</th><th class="n">Reward</th><th class="n">Entries</th><th class="n">Reward per entry</th><th class="n">Closes in</th></tr></thead><tbody>${rows}</tbody></table></div>`;
     return head(lede) + svg + facts(list) + table + shareRow();
+  }
+  // --- the moving part of the swarm view: a canvas over the lanes -----------------------------
+  // Dots appear at the moment they were sent; a spark runs from each new dot into its task's square,
+  // which bumps and counts up. The replay runs once on arrival, then the view idles with sparks from the
+  // most recent entries, and anything that arrives while the page is open flies in live.
+  let SW = null, swRun = 0, swKnown = new Set();
+  const swKeep = { key: null, frac: 1, playing: false }; // where the replay is, kept across redraws
+  function mountSwarm() {
+    const cv = $("#sw-canvas"); if (!cv || !SW) return;
+    const run = ++swRun, S = SW, ctx = cv.getContext("2d"), dpr = Math.min(2, devicePixelRatio || 1);
+    const still = state.card || matchMedia("(prefers-reduced-motion:reduce)").matches;
+    cv.width = S.W * dpr; cv.height = S.H * dpr; cv.style.width = S.W + "px"; cv.style.height = S.H + "px";
+    const all = S.lanes.flatMap((l, i) => l.dots.map((d) => ((d.lane = i), d)));
+    const span = S.now - S.from, REPLAY = 11000; // the 24 hours play back in 11 seconds
+    const firstVisit = swKeep.key !== S.key;
+    let clock = S.now, playing = false, sparks = [], hoverLane = -1, hoverDot = null, last = performance.now(), idleAt = 0;
+    const pulse = S.lanes.map(() => -1e9), shownCount = S.lanes.map(() => -1);
+    const play = $("#sw-play"), scrub = $("#sw-scrub"), clockEl = $("#sw-clock");
+    const reveal = (d, t, withSpark) => { d.shown = true; d.born = t; if (withSpark && sparks.length < 260) sparks.push({ d, start: t }); };
+    const setClock = (ms, t, withSpark) => { clock = Math.max(S.from, Math.min(S.now, ms)); swKeep.frac = (clock - S.from) / span; for (const d of all) { if (d.t <= clock && !d.shown) reveal(d, t, withSpark); else if (d.t > clock && d.shown) d.shown = false; } };
+    const setPlaying = (on, label) => { playing = swKeep.playing = on; play.textContent = label; };
+    const start = () => { for (const d of all) d.shown = false; sparks = []; clock = S.from; setPlaying(true, "Pause"); };
+    if (still) setClock(S.now, -1e9, false);
+    else if (firstVisit) { swKeep.key = S.key; start(); }
+    else if (swKeep.frac < 1) { // redrawn in the middle of a replay or a scrub: carry on from the same moment
+      setClock(S.from + swKeep.frac * span, -1e9, false); setPlaying(swKeep.playing, swKeep.playing ? "Pause" : "Resume"); scrub.value = Math.round(swKeep.frac * 1000);
+    } else { // a refresh while the page is open: keep everything, and fly in only what is new
+      const t = performance.now();
+      for (const d of all) { if (swKnown.has(d.key)) { d.shown = true; d.born = -1e9; } else reveal(d, t + Math.random() * 1500, true); }
+    }
+    for (const d of all) swKnown.add(d.key);
+    play.onclick = () => { if (playing) setPlaying(false, "Resume"); else if (clock >= S.now) start(); else setPlaying(true, "Pause"); };
+    scrub.oninput = () => { setPlaying(false, +scrub.value >= 1000 ? "Replay the day" : "Resume"); sparks = []; setClock(S.from + (span * scrub.value) / 1000, -1e9, false); };
+    const at = (e) => { const r = cv.getBoundingClientRect(); return [((e.clientX - r.left) * S.W) / r.width, ((e.clientY - r.top) * S.H) / r.height]; };
+    cv.onpointermove = (e) => {
+      const [x, y] = at(e); hoverLane = S.lanes.findIndex((l) => y >= l.top && y < l.bottom); hoverDot = null;
+      const l = S.lanes[hoverLane]; let best = 81;
+      if (l) for (const d of l.dots) { if (!d.shown) continue; const q = (d.x - x) ** 2 + (d.y - y) ** 2; if (q < best) { best = q; hoverDot = d; } }
+      const onTile = l && Math.abs(x - l.tx) < l.side / 2 + 6 && Math.abs(y - l.cy) < l.side / 2 + 6;
+      cv.style.cursor = onTile ? "pointer" : hoverDot ? "crosshair" : "default";
+      if (hoverDot) showTip(`<b>${hoverDot.actor}… sent an entry</b><span>${hm(hoverDot.t)} UTC · ${ago(hoverDot.t)}</span><span>to ${esc(l.task.title.slice(0, 48))}</span>`);
+      else if (onTile) showTip(taskTip(l.task)); else hideTip();
+    };
+    cv.onpointerleave = () => { hoverLane = -1; hoverDot = null; hideTip(); };
+    cv.onclick = (e) => { const [x, y] = at(e), l = S.lanes.find((l) => Math.abs(x - l.tx) < l.side / 2 + 6 && Math.abs(y - l.cy) < l.side / 2 + 6); if (l) open(taskUrl(l.task), "_blank", "noopener"); };
+
+    const ease = (u) => 1 - (1 - u) ** 3;
+    function frame(t) {
+      if (run !== swRun || !cv.isConnected) return;
+      const dt = Math.min(64, t - last); last = t;
+      if (playing) { setClock(clock + (dt / REPLAY) * span, t, true); if (clock >= S.now) setPlaying(false, "Replay the day"); scrub.value = Math.round(((clock - S.from) / span) * 1000); }
+      // idle: every so often one of the newest entries sends another spark, so the page never sits still
+      if (!playing && !still && clock >= S.now && t - idleAt > 420) { idleAt = t; const recent = all.filter((d) => d.shown && S.now - d.t < 3 * 3600e3); const pool = recent.length > 4 ? recent : all; if (pool.length) sparks.push({ d: pool[(Math.random() * pool.length) | 0], start: t, soft: true }); }
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, S.W, S.H);
+      // time cursor
+      if (clock < S.now) { const x = S.padL + ((clock - S.from) / span) * S.xw; ctx.fillStyle = "rgba(217,160,151,.5)"; ctx.fillRect(x, 0, 1, S.H - 24); }
+      const count = S.lanes.map(() => 0);
+      for (const d of all) {
+        if (!d.shown) continue; count[d.lane]++;
+        const age = t - d.born, pop = age < 450 ? 1 - age / 450 : 0, fresh = S.now - d.t < 3600e3;
+        const dim = hoverLane >= 0 && hoverLane !== d.lane ? 0.18 : 1;
+        const breathe = fresh && !still ? 0.75 + 0.25 * Math.sin(t / 380 + d.x) : 1;
+        ctx.globalAlpha = (fresh ? 1 : 0.55) * dim * breathe + pop * 0.4 * dim;
+        ctx.fillStyle = fresh || pop ? "#FFF6E8" : "#EFE9E2";
+        ctx.beginPath(); ctx.arc(d.x, d.y, (d === hoverDot ? 4.5 : fresh ? 2.6 : 2) + pop * 4, 0, 6.2832); ctx.fill();
+      }
+      // sparks: from the dot along a curve into the square
+      sparks = sparks.filter((s) => {
+        const u = (t - s.start) / (s.soft ? 1500 : 900); if (u < 0) return true;
+        const l = S.lanes[s.d.lane];
+        if (u >= 1) { if (!s.soft) pulse[s.d.lane] = t; return false; }
+        const dim = hoverLane >= 0 && hoverLane !== s.d.lane ? 0.15 : 1;
+        for (let k = 0; k < 5; k++) { const v = ease(Math.max(0, u - k * 0.035)), x = s.d.x + (l.tx - s.d.x) * v, y = s.d.y + (l.cy - s.d.y) * v * v; ctx.globalAlpha = (s.soft ? 0.5 : 0.95) * (1 - k / 5) * dim; ctx.fillStyle = s.soft ? "#D9A097" : "#FFF6E8"; ctx.beginPath(); ctx.arc(x, y, (s.soft ? 1.6 : 2.2) * (1 - k / 7), 0, 6.2832); ctx.fill(); }
+        return true;
+      });
+      // squares: a ring when an entry lands, and the running count
+      S.lanes.forEach((l, i) => {
+        const p = (t - pulse[i]) / 520;
+        if (p >= 0 && p < 1) { ctx.globalAlpha = (1 - p) * 0.8; ctx.strokeStyle = "#FFF6E8"; ctx.lineWidth = 2; const r = l.side / 2 + 3 + p * 12; ctx.beginPath(); ctx.roundRect(l.tx - r, l.cy - r, 2 * r, 2 * r, r * 0.5); ctx.stroke(); }
+        if (count[i] !== shownCount[i]) { shownCount[i] = count[i]; const el = document.getElementById("cnt-" + i); if (el) el.textContent = n0(count[i]); }
+      });
+      ctx.globalAlpha = 1;
+      document.querySelectorAll(".swarmbox [data-lane]").forEach((el) => (el.style.opacity = hoverLane >= 0 && +el.dataset.lane !== hoverLane ? 0.3 : 1));
+      clockEl.textContent = clock >= S.now ? "NOW · " + hm(S.now) + " UTC" : hm(clock) + " UTC · " + ago(clock).toUpperCase();
+      if (!still) requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
   }
   let feedLoading = false;
   function loadFeed() { if (feedLoading) return; feedLoading = true; get("feed").then((f) => { D.feed = f; feedLoading = false; if (state.view === "swarm" || state.card) render(); }).catch(() => (feedLoading = false)); }
@@ -451,6 +537,7 @@
     hideTip();
     const keep = $(".scroll", main)?.scrollTop;
     main.innerHTML = RENDER[state.view]();
+    if (state.view === "swarm") mountSwarm();
     if (keep && $(".scroll", main)) $(".scroll", main).scrollTop = keep;
     const plain = { board: "Every task, one tile each", flow: "Where the money went", swarm: "What agents are working on now", pulse: "The market, day by day", methods: "How every number is made" }[state.view];
     document.title = `${plain} · Taskmarket live`;
@@ -462,7 +549,7 @@
       const raw = await get("tasks"); D.tasks = shapeTasks(raw);
       if (state.view === "swarm" || D.feed) { feedLoading = false; D.feed = await get("feed"); }
       // Do not redraw under a reader's pointer on the big drawings; numbers update on the next view change.
-      if (first || ["pulse", "methods"].includes(state.view) || tip.hidden) render(); else chrome();
+      if (first || ["pulse", "methods", "swarm"].includes(state.view) || tip.hidden) render(); else chrome();
     } catch (e) {
       if (first) main.insertAdjacentHTML("beforeend", `<p class="lede">The data could not be loaded just now. This page will try again in a minute.</p>`);
     }
