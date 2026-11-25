@@ -286,7 +286,7 @@
     });
     SW = { W, H, from, now, lanes, lane, padL, xw: W - padR - padL - 30, key: state.chain + "|" + top.map((x) => x.t.id).join() };
     const controls = top.length ? `<p class="row swctl"><button type="button" class="share" id="sw-play" style="min-width:132px">Replay the day</button><input id="sw-scrub" type="range" min="0" max="1000" value="1000" aria-label="Move through the last 24 hours"><span class="label" id="sw-clock"></span></p>` : "";
-    const svg = top.length ? `${controls}<div class="swarmbox" style="position:relative"><svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Entries sent in the last 24 hours, as dots converging on the tasks they were sent to.">${g}</svg><canvas id="sw-canvas" style="position:absolute;left:0;top:0;touch-action:pan-y"></canvas></div><p class="cap" style="font:400 12px var(--mono);color:var(--muted);margin:6px 0 0">Press “Replay the day” or drag the slider. Hover a dot to see who sent it and when; hover a lane to single it out; click a square to open the task.</p>` : `<div class="skeleton">No entries on ${chainWord()} in the last 24 hours.</div>`;
+    const svg = top.length ? `${controls}<div class="swarmbox" style="position:relative"><svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Entries sent in the last 24 hours, as dots converging on the tasks they were sent to.">${g}</svg><canvas id="sw-canvas" style="position:absolute;left:0;top:0;touch-action:pan-y"></canvas></div><p class="cap" style="font:400 12px var(--mono);color:var(--muted);margin:6px 0 0">Press “Replay the day” or drag the slider. Hover a lane to play that task's day again; hover a dot to see who sent it and when; click a square to open the task.</p>` : `<div class="skeleton">No entries on ${chainWord()} in the last 24 hours.</div>`;
 
     const open = tasks().filter((t) => t.o === 1), openB = open.filter((t) => t.mode === "bounty");
     const top3 = per.slice(0, 3).reduce((s, x) => s + x.rows.length, 0), agents = new Set(subs.map((r) => r[4])).size;
@@ -320,9 +320,9 @@
     const pulse = S.lanes.map(() => -1e9), shownCount = S.lanes.map(() => -1);
     const play = $("#sw-play"), scrub = $("#sw-scrub"), clockEl = $("#sw-clock");
     const reveal = (d, t, withSpark) => { d.shown = true; d.born = t; if (withSpark && sparks.length < 260) sparks.push({ d, start: t }); };
-    const setClock = (ms, t, withSpark) => { clock = Math.max(S.from, Math.min(S.now, ms)); swKeep.frac = (clock - S.from) / span; for (const d of all) { if (d.t <= clock && !d.shown) reveal(d, t, withSpark); else if (d.t > clock && d.shown) d.shown = false; } };
+    const setClock = (ms, t, withSpark) => { clock = Math.max(S.from, Math.min(S.now, ms)); swKeep.frac = (clock - S.from) / span; for (const d of all) { if (d.due) { if (ms < S.now) d.due = 0; else continue; } if (d.t <= clock && !d.shown) reveal(d, t, withSpark); else if (d.t > clock && d.shown) d.shown = false; } };
     const setPlaying = (on, label) => { playing = swKeep.playing = on; play.textContent = label; };
-    const start = () => { for (const d of all) d.shown = false; sparks = []; clock = S.from; setPlaying(true, "Pause"); };
+    const start = () => { for (const d of all) { d.shown = false; d.due = 0; } sparks = []; clock = S.from; setPlaying(true, "Pause"); };
     if (still) setClock(S.now, -1e9, false);
     else if (firstVisit) { swKeep.key = S.key; start(); }
     else if (swKeep.frac < 1) { // redrawn in the middle of a replay or a scrub: carry on from the same moment
@@ -336,7 +336,13 @@
     scrub.oninput = () => { setPlaying(false, +scrub.value >= 1000 ? "Replay the day" : "Resume"); sparks = []; setClock(S.from + (span * scrub.value) / 1000, -1e9, false); };
     const at = (e) => { const r = cv.getBoundingClientRect(); return [((e.clientX - r.left) * S.W) / r.width, ((e.clientY - r.top) * S.H) / r.height]; };
     cv.onpointermove = (e) => {
-      const [x, y] = at(e); hoverLane = S.lanes.findIndex((l) => y >= l.top && y < l.bottom); hoverDot = null;
+      const [x, y] = at(e), was = hoverLane; hoverLane = S.lanes.findIndex((l) => y >= l.top && y < l.bottom); hoverDot = null;
+      // Entering a lane plays that task's day again: its dots leave and fly back in, in the order they were sent.
+      if (hoverLane >= 0 && hoverLane !== was && !playing && !still && clock >= S.now) {
+        const ds = S.lanes[hoverLane].dots, t0 = performance.now(), dur = Math.min(2600, 500 + ds.length * 45);
+        sparks = sparks.filter((sp) => sp.d.lane !== hoverLane);
+        ds.forEach((d, i) => { d.shown = false; d.due = t0 + (i / Math.max(1, ds.length - 1)) * dur; });
+      }
       const l = S.lanes[hoverLane]; let best = 81;
       if (l) for (const d of l.dots) { if (!d.shown) continue; const q = (d.x - x) ** 2 + (d.y - y) ** 2; if (q < best) { best = q; hoverDot = d; } }
       const onTile = l && Math.abs(x - l.tx) < l.side / 2 + 6 && Math.abs(y - l.cy) < l.side / 2 + 6;
@@ -344,6 +350,7 @@
       if (hoverDot) showTip(`<b>${hoverDot.actor}… sent an entry</b><span>${hm(hoverDot.t)} UTC · ${ago(hoverDot.t)}</span><span>to ${esc(l.task.title.slice(0, 48))}</span>`);
       else if (onTile) showTip(taskTip(l.task)); else hideTip();
     };
+    cv.onpointerdown = (e) => { if (e.pointerType !== "mouse") { hoverLane = -1; cv.onpointermove(e); } };
     cv.onpointerleave = () => { hoverLane = -1; hoverDot = null; hideTip(); };
     cv.onclick = (e) => { const [x, y] = at(e), l = S.lanes.find((l) => Math.abs(x - l.tx) < l.side / 2 + 6 && Math.abs(y - l.cy) < l.side / 2 + 6); if (l) open(taskUrl(l.task), "_blank", "noopener"); };
 
@@ -359,6 +366,7 @@
       if (clock < S.now) { const x = S.padL + ((clock - S.from) / span) * S.xw; ctx.fillStyle = "rgba(217,160,151,.5)"; ctx.fillRect(x, 0, 1, S.H - 24); }
       const count = S.lanes.map(() => 0);
       for (const d of all) {
+        if (!d.shown && d.due && t >= d.due) { d.due = 0; reveal(d, t, true); }
         if (!d.shown) continue; count[d.lane]++;
         const age = t - d.born, pop = age < 450 ? 1 - age / 450 : 0, fresh = S.now - d.t < 3600e3;
         const dim = hoverLane >= 0 && hoverLane !== d.lane ? 0.18 : 1;
