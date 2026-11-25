@@ -233,9 +233,10 @@
       const A = ln.get(a), B = rn.get(b), h = Math.max(0.6, v * k), ya = A.y + A.used, yb = B.y + B.used; A.used += h; B.used += h;
       const xa = x0 + nodeW, xb = x1, mx = (xa + xb) / 2;
       const tipHtml = `<b>${lName(a)} → ${rName(b)}</b><span>${usd(v)} · ${pct(v, total)} of all rewards</span>`;
-      const op = b === "dead" ? 0.5 : b === "wait" ? 0.14 : 0.22;
+      const op = b === "dead" ? 0.62 : b === "wait" ? 0.2 : 0.3;
+      const tone = b === "open" ? "s" : b === "dead" ? "d" : b === "wait" || b === "split" ? "m" : "p";
       geo.push({ a, b, v, xa, xb, ya, yb, h, color: b === "open" ? "#D9A097" : b === "dead" || b === "wait" ? "#B0A79D" : "#FFF6E8" });
-      ribbons += `<path class="rb" data-link="${geo.length - 1}" style="--op:${op};animation-delay:${(lOrder.indexOf(a) * 70 + rOrder.indexOf(b) * 25)}ms" d="M${xa},${ya}C${mx},${ya} ${mx},${yb} ${xb},${yb}L${xb},${yb + h}C${mx},${yb + h} ${mx},${ya + h} ${xa},${ya + h}Z" fill="${b === "wait" ? "#B0A79D" : rFill(b)}" fill-opacity="${op}" data-tip="${esc(tipHtml)}"/>`;
+      ribbons += `<path class="rb" data-link="${geo.length - 1}" style="--op:${op};animation-delay:${(lOrder.indexOf(a) * 70 + rOrder.indexOf(b) * 25)}ms" d="M${xa},${ya}C${mx},${ya} ${mx},${yb} ${xb},${yb}L${xb},${yb + h}C${mx},${yb + h} ${mx},${ya + h} ${xa},${ya + h}Z" fill="url(#band-${tone}${geo.length % 3})" fill-opacity="${op}" data-tip="${esc(tipHtml)}"/>`;
     }
     // what each box says when pointed at: where a poster's money went, or who paid a winner
     const nodeTip = {};
@@ -253,8 +254,12 @@
     let nodes = "";
     for (const key of lOrder) { const n = ln.get(key); nodes += `<rect x="${x0}" y="${n.y}" width="${nodeW}" height="${n.h}" rx="2" fill="#EFE9E2"/><rect class="hit" data-node="L${esc(key)}" x="0" y="${n.y - pad / 2}" width="${x0 + nodeW}" height="${n.h + pad}" fill="transparent" data-tip="${esc(nodeTip["L" + key])}"/>` + label(x0 - 8, "end", n.y, n.h, lName(key), usd(lv.get(key))); }
     for (const key of rOrder) { const n = rn.get(key); nodes += `<rect x="${x1}" y="${n.y}" width="${nodeW}" height="${n.h}" rx="2" fill="${rFill(key)}" ${key === "wait" ? 'stroke="#B0A79D" stroke-width="1.5"' : ""}/><rect class="hit" data-node="R${esc(key)}" x="${x1}" y="${n.y - pad / 2}" width="${W - x1}" height="${n.h + pad}" fill="transparent" data-tip="${esc(nodeTip["R" + key])}"/>` + label(x1 + nodeW + 8, "start", n.y, n.h, rName(key), usd(rv.get(key))); }
+    // The bands themselves move: each is filled with a soft light-and-dark wave that travels from the
+    // posters' side to the other side, at three slightly different speeds so the bands do not march in step.
+    const moving = !state.card && !matchMedia("(prefers-reduced-motion:reduce)").matches;
+    const bandDefs = Object.entries({ p: "#FFF6E8", s: "#D9A097", m: "#B0A79D", d: "#453E37" }).map(([tone, col]) => [0, 1, 2].map((v) => { const period = 230 + v * 70; return `<linearGradient id="band-${tone}${v}" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="${period}" y2="0" spreadMethod="repeat"><stop offset="0" stop-color="${col}" stop-opacity=".38"/><stop offset=".5" stop-color="${col}" stop-opacity="1"/><stop offset="1" stop-color="${col}" stop-opacity=".38"/>${moving ? `<animateTransform attributeName="gradientTransform" type="translate" from="0 0" to="${period} 0" dur="${2.6 + v * 0.7}s" repeatCount="indefinite"/>` : ""}</linearGradient>`; }).join("")).join("");
     FL = { W, H, geo, total, key: state.chain + "|" + W };
-    const svg = `<svg viewBox="0 -22 ${W} ${H + 30}" width="${W}" height="${H + 30}" role="img" aria-label="Rewards flowing from the wallets that posted tasks to the wallets that won them, and to rewards still held or ended unpaid."><text x="${x0 + nodeW}" y="-8" text-anchor="end">POSTED BY</text><text x="${x1}" y="-8">WENT TO</text>${ribbons}${nodes}</svg>`;
+    const svg = `<svg viewBox="0 -22 ${W} ${H + 30}" width="${W}" height="${H + 30}" role="img" aria-label="Rewards flowing from the wallets that posted tasks to the wallets that won them, and to rewards still held or ended unpaid."><defs>${bandDefs}</defs><text x="${x0 + nodeW}" y="-8" text-anchor="end">POSTED BY</text><text x="${x1}" y="-8">WENT TO</text>${ribbons}${nodes}</svg>`;
 
     const paidTs = ts.filter((t) => t.o === 0), paid = sum(paidTs, (t) => t.reward);
     const top3 = postTotals.slice(0, 3).reduce((s, x) => s + x[1], 0);
@@ -269,8 +274,8 @@
       self.length && [n0(self.length), `paid tasks list the <b>posting wallet itself</b> as the winner (${usd(sum(self, (t) => t.reward))}).`],
     ];
     const note = `<p class="sub" style="color:var(--muted);font-size:13.5px;max-width:80ch;margin-top:14px">Each task's full reward is counted once. The task list names one winner per task; ${n0(rc.get("split") || 0)} paid tasks had more than one winner, and their rewards are shown as “Shared by several winners” because the list does not give the split. Wallets are shown as addresses only.</p>`;
-    const hint = `<p class="cap" style="font:400 12px var(--mono);color:var(--muted);margin:0 0 10px">Point at a wallet or a box to follow its money; click to keep it lit. Each moving dot is reward money on its way.</p>`;
-    return head(lede) + hint + `<div class="flowbox" style="position:relative">${svg}<canvas id="fl-canvas" style="position:absolute;left:0;top:0;pointer-events:none"></canvas></div>` + note + facts(list) + shareRow();
+    const hint = `<p class="cap" style="font:400 12px var(--mono);color:var(--muted);margin:0 0 10px">Money moves from left to right. Point at a wallet or a box to follow its money; click to keep it lit.</p>`;
+    return head(lede) + hint + `<div class="flowbox" style="position:relative">${svg}</div>` + note + facts(list) + shareRow();
   }
 
   // ---------- view 3: the swarm ---------------------------------------------------------------
@@ -320,60 +325,28 @@
     return head(lede) + svg + facts(list) + table + shareRow();
   }
   // --- the moving part of the money view ------------------------------------------------------------
-  // Ribbons wipe in from the posters' side on arrival, then dots of money keep travelling along them
-  // (more dots on fatter ribbons). Pointing at a wallet or a box lights its ribbons, plays them in
-  // again and sends a burst of dots down them; a click keeps it lit.
-  let FL = null, flRun = 0, flSeen = null, flPin = null;
+  // Only the bands move. They wipe in from the posters' side on arrival and their fill keeps travelling
+  // left to right (see bandDefs). Pointing at a wallet or a box lights its bands and wipes them in again;
+  // a click keeps it lit.
+  let FL = null, flSeen = null, flPin = null;
   function mountFlow() {
-    const cv = $("#fl-canvas"), box = $(".flowbox"); if (!cv || !FL) return;
-    const run = ++flRun, F = FL, ctx = cv.getContext("2d"), dpr = Math.min(2, devicePixelRatio || 1);
-    const still = state.card || matchMedia("(prefers-reduced-motion:reduce)").matches;
-    cv.width = F.W * dpr; cv.height = (F.H + 30) * dpr; cv.style.width = F.W + "px"; cv.style.height = F.H + 30 + "px";
+    const box = $(".flowbox"); if (!box || !FL) return;
+    const F = FL, still = state.card || matchMedia("(prefers-reduced-motion:reduce)").matches;
     const paths = [...box.querySelectorAll(".rb")];
     if (still || flSeen === F.key) paths.forEach((p) => p.classList.add("in")); // only wipe in on the first visit
     flSeen = F.key;
     if (flPin && !box.querySelector(`[data-node="${CSS.escape(flPin)}"]`)) flPin = null;
-    let active = null, parts = [], last = performance.now(), born = last;
-    const related = (node) => F.geo.map((g, i) => (("L" + g.a === node || "R" + g.b === node) ? i : -1)).filter((i) => i >= 0);
+    const related = (node) => new Set(F.geo.map((g, i) => (("L" + g.a === node || "R" + g.b === node) ? i : -1)).filter((i) => i >= 0));
     const light = (node, replay) => {
-      active = node ? new Set(related(node)) : null;
-      paths.forEach((p, i) => { p.style.fillOpacity = active ? (active.has(i) ? Math.min(0.75, +p.style.getPropertyValue("--op") * 2.6) : 0.035) : ""; });
-      box.querySelectorAll("text").forEach((t) => (t.style.opacity = ""));
-      if (node && replay && !still) {
-        for (const i of active) { const p = paths[i]; p.classList.remove("in", "again"); void p.getBoundingClientRect(); p.style.animationDelay = "0ms"; p.classList.add("again"); }
-        const list = [...active], now = performance.now();
-        for (let n = 0; n < 46; n++) spawn(list[(Math.random() * list.length) | 0], now + n * 22, true);
-      }
+      const active = node ? related(node) : null;
+      paths.forEach((p, i) => { p.style.fillOpacity = active ? (active.has(i) ? Math.min(0.95, +p.style.getPropertyValue("--op") * 2.4) : 0.04) : ""; });
+      if (active && replay && !still) for (const i of active) { const p = paths[i]; p.classList.remove("in", "again"); void p.getBoundingClientRect(); p.style.animationDelay = "0ms"; p.classList.add("again"); }
     };
-    const spawn = (i, t, bright) => { const g = F.geo[i]; parts.push({ g, i, start: t, dur: 1500 + Math.random() * 1100, off: Math.random(), bright }); };
-    // pick a ribbon in proportion to its money
-    const pick = (set) => { const pool = set ? [...set] : F.geo.map((_, i) => i); let r = Math.random() * sum(pool, (i) => F.geo[i].v); for (const i of pool) { r -= F.geo[i].v; if (r <= 0) return i; } return pool[0]; };
     let hover = null;
     box.onpointerover = (e) => { const n = e.target.closest("[data-node]")?.dataset.node || null; if (n === hover) return; hover = n; if (n) light(n, true); else light(flPin, false); };
     box.onpointerleave = () => { hover = null; light(flPin, false); };
     box.onclick = (e) => { const n = e.target.closest("[data-node]")?.dataset.node || null; flPin = n && n !== flPin ? n : null; light(flPin || hover, !!flPin); };
     if (flPin) light(flPin, false);
-    if (still) return;
-    const bez = (p0, p1, p2, p3, u) => { const v = 1 - u; return v * v * v * p0 + 3 * v * v * u * p1 + 3 * v * u * u * p2 + u * u * u * p3; };
-    function frame(t) {
-      if (run !== flRun || !cv.isConnected) return;
-      const dt = Math.min(64, t - last); last = t;
-      // steady stream once the ribbons are in; about 55 dots a second, fewer on a phone
-      if (t - born > 900) { let n = (dt / 1000) * (F.W < 700 ? 28 : 55); while (n > 0) { if (n >= 1 || Math.random() < n) spawn(pick(active), t, false); n -= 1; } }
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 22 * dpr); ctx.clearRect(0, -22, F.W, F.H + 30);
-      parts = parts.filter((p) => {
-        const u = (t - p.start) / p.dur; if (u < 0) return true; if (u >= 1) return false;
-        const g = p.g, mx = (g.xa + g.xb) / 2, o = (p.off - 0.5) * Math.max(0, g.h - 2) + g.h / 2;
-        const x = bez(g.xa, mx, mx, g.xb, u), y = bez(g.ya, g.ya, g.yb, g.yb, u) + o;
-        const dim = active && !active.has(p.i) ? 0.08 : 1, fade = Math.min(1, u * 8, (1 - u) * 8);
-        ctx.globalAlpha = (p.bright ? 1 : 0.7) * fade * dim; ctx.fillStyle = g.color;
-        ctx.beginPath(); ctx.arc(x, y, p.bright ? 2.1 : 1.5, 0, 6.2832); ctx.fill();
-        return true;
-      });
-      ctx.globalAlpha = 1;
-      requestAnimationFrame(frame);
-    }
-    requestAnimationFrame(frame);
   }
 
   // --- the moving part of the swarm view: a canvas over the lanes -----------------------------
