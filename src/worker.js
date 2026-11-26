@@ -9,6 +9,11 @@
 // It only ever sends GET requests to the endpoints listed in SOURCES below. No keys, no wallet, no writes.
 //
 // Free-plan budget: each run does one or two small fetches so it stays inside 10 ms of CPU.
+//
+// Storage budget: the Durable Object is put to sleep between runs and reloads its copy every time it
+// wakes (several times a minute), and the free plan allows 5 million rows read a day. So tasks are
+// stored a week per row and the feed an hour per row: a wake reads a few dozen rows, not thousands.
+// If the store cannot answer at all, the Worker serves the saved copy in public/fallback/, marked as saved.
 
 import { DurableObject } from "cloudflare:workers";
 
@@ -42,6 +47,8 @@ const FEED_TYPES = ["task_created", "task_submitted", "task_claimed", "task_comp
 const FEED_HOURS = 24; // the swarm view looks back this far
 const FEED_MAX = 4000;
 const SNAPSHOT_TTL = 60_000; // the served copy is rebuilt at most once a minute
+const TASK_BUCKET = 7 * 86400; // tasks are stored one row per chain and week of creation
+const HOUR = 3600_000; // the feed is stored one row per hour
 
 const idx = (list, v) => { const i = list.indexOf(v); return i < 0 ? v : i; };
 const secs = (iso) => (iso ? Math.floor(Date.parse(iso) / 1000) : 0);
@@ -68,18 +75,71 @@ export class Store extends DurableObject {
     super(ctx, env);
     this.sql = ctx.storage.sql;
     this.sql.exec("CREATE TABLE IF NOT EXISTS small (k TEXT PRIMARY KEY, v TEXT NOT NULL, at INTEGER NOT NULL)");
-    this.sql.exec("CREATE TABLE IF NOT EXISTS task (id TEXT PRIMARY KEY, chain INTEGER NOT NULL, created INTEGER NOT NULL, row TEXT NOT NULL)");
     this.sql.exec("CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT NOT NULL)");
+    // Task rows, packed: one stored row per chain and week ("4217:2950"), task rows inside joined by newlines.
+    this.sql.exec("CREATE TABLE IF NOT EXISTS taskweek (k TEXT PRIMARY KEY, body TEXT NOT NULL)");
+    // Feed rows, packed the same way: one stored row per hour.
+    this.sql.exec("CREATE TABLE IF NOT EXISTS feedhour (h INTEGER PRIMARY KEY, body TEXT NOT NULL)");
     this.tasks = { 4217: new Map(), 8453: new Map() };
+    this.weekIds = new Map(); this.weekOf = new Map(); this.weekDirty = new Set();
     this.openNow = {}; this.openBefore = {}; this.left = []; // tasks that have just left the open list
-    for (const r of this.sql.exec("SELECT id, chain, row FROM task")) this.tasks[r.chain]?.set(r.id, r.row);
+    for (const r of this.sql.exec("SELECT k, body FROM taskweek")) {
+      const chain = Number(r.k.split(":")[0]), map = this.tasks[chain], ids = new Set();
+      if (!map) continue;
+      for (const row of r.body.split("\n")) if (row) { const id = row.slice(2, row.indexOf('"', 2)); map.set(id, row); ids.add(id); this.weekOf.set(id, r.k); }
+      this.weekIds.set(r.k, ids);
+    }
     this.meta = {};
     for (const r of this.sql.exec("SELECT k, v FROM meta")) this.meta[r.k] = JSON.parse(r.v);
-    this.sql.exec("CREATE TABLE IF NOT EXISTS feed (ts INTEGER NOT NULL, row TEXT NOT NULL)");
-    this.feedRows = [];
-    for (const r of this.sql.exec("SELECT ts, row FROM feed WHERE ts >= ?", Date.now() - FEED_HOURS * 3600_000)) this.feedRows.push([r.ts, r.row]);
+    this.feedRows = []; this.feedDirty = new Set();
+    const cut = Date.now() - FEED_HOURS * HOUR;
+    for (const r of this.sql.exec("SELECT body FROM feedhour WHERE h >= ?", Math.floor(cut / HOUR)))
+      for (const row of r.body.split("\n")) if (row) { const ts = Number(row.slice(1, row.indexOf(","))); if (ts >= cut) this.feedRows.push([ts, row]); }
     this.feedSeen = new Set(this.feedRows.map((r) => r[1]));
     this.cache = {};
+    this.moveOldTables(cut);
+  }
+
+  // One time, after the deploy that introduced packed rows: copy the old one-row-per-item tables across.
+  moveOldTables(cut) {
+    const old = new Set([...this.sql.exec("SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('task', 'feed')")].map((r) => r.name));
+    if (old.has("task")) {
+      for (const r of this.sql.exec("SELECT id, chain, created, row FROM task")) if (this.tasks[r.chain] && !this.tasks[r.chain].has(r.id)) this.putTask(r.chain, r.id, r.created, r.row);
+      this.flushTasks();
+      this.sql.exec("DROP TABLE task");
+    }
+    if (old.has("feed")) {
+      for (const r of this.sql.exec("SELECT ts, row FROM feed WHERE ts >= ?", cut)) if (!this.feedSeen.has(r.row)) this.addFeed(r.ts, r.row);
+      this.flushFeed();
+      this.sql.exec("DROP TABLE feed");
+    }
+  }
+
+  // Keep one task row in memory and note which stored week has to be written again.
+  putTask(chain, id, created, row) {
+    this.tasks[chain].set(id, row);
+    const k = chain + ":" + Math.floor(created / TASK_BUCKET), was = this.weekOf.get(id);
+    if (was && was !== k) { this.weekIds.get(was)?.delete(id); this.weekDirty.add(was); }
+    if (!this.weekIds.has(k)) this.weekIds.set(k, new Set());
+    this.weekIds.get(k).add(id); this.weekOf.set(id, k); this.weekDirty.add(k);
+  }
+  flushTasks() {
+    for (const k of this.weekDirty) {
+      const map = this.tasks[Number(k.split(":")[0])];
+      const body = [...this.weekIds.get(k)].map((id) => map.get(id)).join("\n");
+      this.sql.exec("INSERT INTO taskweek (k, body) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET body = excluded.body", k, body);
+    }
+    this.weekDirty.clear();
+  }
+  addFeed(ts, row) {
+    this.feedSeen.add(row); this.feedRows.push([ts, row]); this.feedDirty.add(Math.floor(ts / HOUR));
+  }
+  flushFeed() {
+    for (const h of this.feedDirty) {
+      const body = this.feedRows.filter((r) => Math.floor(r[0] / HOUR) === h).map((r) => r[1]).join("\n");
+      this.sql.exec("INSERT INTO feedhour (h, body) VALUES (?, ?) ON CONFLICT(h) DO UPDATE SET body = excluded.body", h, body);
+    }
+    this.feedDirty.clear();
   }
 
   setMeta(k, v) {
@@ -109,18 +169,16 @@ export class Store extends DurableObject {
     for (const x of d.items) {
       const ts = Date.parse(x.timestamp);
       const row = JSON.stringify([ts, idx(FEED_TYPES, x.type), x.taskId.slice(0, 18), x.chainId, String(x.actor || "").slice(0, 10), x.amount == null ? null : Number(x.amount), x.rating]);
-      if (this.feedSeen.has(row)) continue;
-      this.feedSeen.add(row);
-      this.feedRows.push([ts, row]);
-      this.sql.exec("INSERT INTO feed (ts, row) VALUES (?, ?)", ts, row);
+      if (!this.feedSeen.has(row)) this.addFeed(ts, row);
     }
+    this.flushFeed();
     if (!cursor) {
       this.setMeta("feedAt", at);
       // Once an hour, drop rows older than the window.
       if (at - (this.feedTrimmed || 0) > 3600_000) {
         this.feedTrimmed = at;
-        const cut = at - FEED_HOURS * 3600_000;
-        this.sql.exec("DELETE FROM feed WHERE ts < ?", cut);
+        const cut = at - FEED_HOURS * HOUR;
+        this.sql.exec("DELETE FROM feedhour WHERE h < ?", Math.floor(cut / HOUR));
         this.feedRows = this.feedRows.filter((r) => r[0] >= cut);
         this.feedSeen = new Set(this.feedRows.map((r) => r[1]));
       }
@@ -134,7 +192,7 @@ export class Store extends DurableObject {
     if (b.done) return;
     const d = await this.fetchFeed(b.cursor || undefined);
     const last = d.items[d.items.length - 1];
-    const reached = !last || Date.parse(last.timestamp) < Date.now() - FEED_HOURS * 3600_000;
+    const reached = !last || Date.parse(last.timestamp) < Date.now() - FEED_HOURS * HOUR;
     this.setMeta("feedBackfill2", { cursor: d.nextCursor || null, pages: b.pages + 1, done: reached || !d.nextCursor || b.pages + 1 >= 80 });
   }
 
@@ -144,12 +202,9 @@ export class Store extends DurableObject {
     const map = this.tasks[chain];
     for (const t of d.tasks) {
       const row = compact(t);
-      if (map.get(t.id) !== row) {
-        map.set(t.id, row);
-        this.sql.exec("INSERT INTO task (id, chain, created, row) VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET row = excluded.row",
-          t.id, chain, secs(t.createdAt), row);
-      }
+      if (map.get(t.id) !== row) this.putTask(chain, t.id, secs(t.createdAt), row);
     }
+    this.flushTasks();
     return d;
   }
 
@@ -232,11 +287,9 @@ export class Store extends DurableObject {
       const t = JSON.parse(await getText(`/api/tasks/${id}?chainId=${chain}`));
       if (!t || t.id !== id) continue;
       const row = compact(t);
-      if (this.tasks[chain].get(id) !== row) {
-        this.tasks[chain].set(id, row);
-        this.sql.exec("INSERT INTO task (id, chain, created, row) VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET row = excluded.row", id, chain, secs(t.createdAt), row);
-      }
+      if (this.tasks[chain].get(id) !== row) this.putTask(chain, id, secs(t.createdAt), row);
     }
+    this.flushTasks();
   }
 
   // --- serving ------------------------------------------------------------------------------
@@ -253,7 +306,7 @@ export class Store extends DurableObject {
   }
 
   feedItems() {
-    const cut = Date.now() - FEED_HOURS * 3600_000;
+    const cut = Date.now() - FEED_HOURS * HOUR;
     return this.feedRows.filter((r) => r[0] >= cut).sort((a, b) => b[0] - a[0]).slice(0, FEED_MAX).map((r) => r[1]).join(",");
   }
 
@@ -289,12 +342,27 @@ export class Store extends DurableObject {
   }
 }
 
+// The store could not answer (for example the plan's daily storage allowance is used up): serve the
+// copy saved in public/fallback/ instead, marked "saved" so the page says so and shows its real age.
+async function saved(url, env) {
+  const name = { "/api/core.json": "core", "/api/tasks.json": "tasks", "/api/feed.json": "feed" }[url.pathname];
+  const r = name && (await env.ASSETS.fetch(new URL(`/fallback/${name}.json`, url)));
+  if (!r || !r.ok) return Response.json({ ok: false, saved: true, note: "The live store is not answering; the data files are being served from a saved copy." }, { status: 503 });
+  return new Response('{"saved":true,' + (await r.text()).slice(1), {
+    headers: { "content-type": "application/json; charset=utf-8", "cache-control": "public, max-age=60", "x-served": "saved-copy" },
+  });
+}
+
 export default {
   async fetch(req, env) {
     if (req.method !== "GET" && req.method !== "HEAD") return new Response("read-only", { status: 405 });
     const url = new URL(req.url);
     if (url.pathname === "/tick") return new Response("not found", { status: 404 });
-    return env.STORE.get(env.STORE.idFromName("main")).fetch(req);
+    try {
+      const r = await env.STORE.get(env.STORE.idFromName("main")).fetch(req);
+      if (r.status < 500) return r;
+    } catch {}
+    return saved(url, env);
   },
   async scheduled(event, env, ctx) {
     const store = env.STORE.get(env.STORE.idFromName("main"));

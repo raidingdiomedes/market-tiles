@@ -10,7 +10,8 @@
     "dev": "node scripts/build-pages.mjs && wrangler dev",
     "build": "node scripts/build-pages.mjs",
     "check": "node scripts/check-numbers.mjs",
-    "cards": "scripts/make-cards.sh"
+    "cards": "scripts/make-cards.sh",
+    "fallback": "node scripts/save-fallback.mjs"
   },
   "devDependencies": {
     "wrangler": "^4.0.0"

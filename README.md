@@ -81,6 +81,9 @@ reads).
   Cloudflare before it reaches this code. Browsers, `curl`, `fetch` and Python `requests` are served. A custom domain
   removes this.
 - Runs on Cloudflare's free plan. Measured CPU per run is 7 to 13 ms.
+- Storage stays inside the free plan's daily allowance: tasks are stored one row per week and the feed one row per
+  hour, so each wake of the store reads a few dozen rows. If the store cannot answer, the Worker serves the copy saved
+  in `public/fallback/` (refresh it with `npm run fallback`), and the page says it is a saved copy and shows its age.
 
 ## Rules it keeps
 

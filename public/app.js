@@ -99,7 +99,7 @@
     document.querySelectorAll("[data-chain]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.chain === state.chain)));
     const t = D.core?.asOf;
     if (t?.headline) {
-      $("#asof").innerHTML = `Data as of <b>${hm(t.headline)} UTC</b>, ${new Date(t.headline).getUTCDate()} ${MON[new Date(t.headline).getUTCMonth()]} ${new Date(t.headline).getUTCFullYear()} (${ago(t.headline)}). Fetched by this site's server from api.taskmarket.dev; refreshed every minute.`;
+      $("#asof").innerHTML = `Data as of <b>${hm(t.headline)} UTC</b>, ${new Date(t.headline).getUTCDate()} ${MON[new Date(t.headline).getUTCMonth()]} ${new Date(t.headline).getUTCFullYear()} (${ago(t.headline)}). ${D.core.saved ? "This is a saved copy: the live refresh is paused and resumes by itself." : "Fetched by this site's server from api.taskmarket.dev; refreshed every minute."}`;
     }
   }
   document.addEventListener("click", (e) => {
